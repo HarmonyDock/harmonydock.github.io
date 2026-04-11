@@ -298,6 +298,19 @@
             </div>
         </div>
 
+        <!-- 文字传输区域 -->
+        <div id="textSection" class="file-section">
+            <textarea id="textInput" placeholder="输入要发送的文字..." rows="3"
+                      style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 10px; font-size: 16px; resize: vertical; font-family: inherit;"></textarea>
+            <button onclick="sendText()" class="btn" style="width: 100%; margin-top: 10px; font-size: 16px; padding: 12px;">发送文字</button>
+        </div>
+
+        <!-- 接收到的消息 -->
+        <div id="receivedMessages" style="display: none; margin-top: 30px; text-align: left;">
+            <h3>接收到的消息:</h3>
+            <div id="messageList" style="max-height: 300px; overflow-y: auto;"></div>
+        </div>
+
         <div id="receivedFiles" class="received-files" style="display: none;">
             <h3>接收到的文件:</h3>
             <div id="fileList"></div>
@@ -573,6 +586,9 @@
                 } else if (message.type === 'file-end') {
                     // 文件传输完成
                     saveReceivedFile();
+                } else if (message.type === 'text') {
+                    // 接收文字消息
+                    displayReceivedMessage(message.content);
                 }
             } else {
                 // 接收文件数据块
@@ -687,6 +703,78 @@
             }
             fileInput.value = '';
         });
+
+        // 发送文字消息
+        function sendText() {
+            const textInput = document.getElementById('textInput');
+            const text = textInput.value.trim();
+            
+            if (!text) {
+                return;
+            }
+            
+            if (!conn || !conn.open) {
+                alert('未连接到对方设备');
+                return;
+            }
+            
+            // 发送文字消息
+            conn.send(JSON.stringify({
+                type: 'text',
+                content: text
+            }));
+            
+            // 显示发送的消息
+            displaySentMessage(text);
+            
+            // 清空输入框
+            textInput.value = '';
+        }
+
+        // 显示发送的消息
+        function displaySentMessage(text) {
+            const receivedMessages = document.getElementById('receivedMessages');
+            const messageList = document.getElementById('messageList');
+            
+            receivedMessages.style.display = 'block';
+            
+            const messageItem = document.createElement('div');
+            messageItem.style.cssText = 'padding: 10px; margin: 10px 0; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #007DFF;';
+            messageItem.innerHTML = `
+                <div style="font-size: 12px; color: #007DFF; margin-bottom: 5px;">我 · ${new Date().toLocaleTimeString()}</div>
+                <div style="color: #333; word-wrap: break-word;">${escapeHtml(text)}</div>
+            `;
+            messageList.appendChild(messageItem);
+            
+            // 滚动到底部
+            messageList.scrollTop = messageList.scrollHeight;
+        }
+
+        // 显示接收到的消息
+        function displayReceivedMessage(text) {
+            const receivedMessages = document.getElementById('receivedMessages');
+            const messageList = document.getElementById('messageList');
+            
+            receivedMessages.style.display = 'block';
+            
+            const messageItem = document.createElement('div');
+            messageItem.style.cssText = 'padding: 10px; margin: 10px 0; background: #f5f5f5; border-radius: 8px; border-left: 4px solid #666;';
+            messageItem.innerHTML = `
+                <div style="font-size: 12px; color: #666; margin-bottom: 5px;">对方 · ${new Date().toLocaleTimeString()}</div>
+                <div style="color: #333; word-wrap: break-word;">${escapeHtml(text)}</div>
+            `;
+            messageList.appendChild(messageItem);
+            
+            // 滚动到底部
+            messageList.scrollTop = messageList.scrollHeight;
+        }
+
+        // HTML转义,防止XSS
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
 
         // 启动
         init();
