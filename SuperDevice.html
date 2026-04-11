@@ -360,14 +360,41 @@
 
         // 显示扫码功能(手机端)
         function showScanner() {
-            const scannerContainer = document.getElementById('scannerContainer');
-            scannerContainer.style.display = 'block';
+            updateStatus('connecting', '正在连接信令服务器...');
             
-            const startScanBtn = document.getElementById('startScanBtn');
-            startScanBtn.addEventListener('click', startScanner);
-            
-            // 同时显示手动连接选项
-            addManualConnectOption();
+            // 手机端也需要先连接到信令服务器
+            peer = new Peer({
+                debug: 2
+            });
+
+            peer.on('open', (id) => {
+                console.log('手机端Peer已打开,ID:', id);
+                updateStatus('connected', '已连接到信令服务器');
+                
+                // 显示扫码界面
+                const scannerContainer = document.getElementById('scannerContainer');
+                scannerContainer.style.display = 'block';
+                
+                const startScanBtn = document.getElementById('startScanBtn');
+                startScanBtn.addEventListener('click', startScanner);
+                
+                // 同时显示手动连接选项
+                addManualConnectOption();
+            });
+
+            peer.on('error', (error) => {
+                console.error('Peer错误:', error);
+                if (error.type === 'browser-incompatible') {
+                    updateStatus('disconnected', '浏览器不支持WebRTC');
+                } else {
+                    updateStatus('disconnected', '连接错误: ' + error.type);
+                }
+            });
+
+            peer.on('disconnected', () => {
+                console.log('Peer已断开');
+                updateStatus('disconnected', '已断开连接');
+            });
         }
 
         // 开始扫描
@@ -533,21 +560,41 @@
 
         // 连接到Peer(手机端)
         function connectToPeer(targetPeerId) {
-            updateStatus('connecting', '正在连接到对方设备...');
-
-            peer = new Peer();
-
-            peer.on('open', () => {
+            console.log('准备连接到对方设备:', targetPeerId);
+            
+            // 如果peer已经存在(手机端扫码后)
+            if (peer && peer.open) {
+                updateStatus('connecting', '正在连接到对方设备...');
                 conn = peer.connect(targetPeerId, {
                     reliable: true
                 });
                 setupConnection();
-            });
+            } else {
+                // 如果peer不存在(通过URL参数连接)
+                updateStatus('connecting', '正在连接信令服务器...');
+                
+                peer = new Peer({
+                    debug: 2
+                });
 
-            peer.on('error', (error) => {
-                console.error('Peer错误:', error);
-                updateStatus('disconnected', '连接错误: ' + error.type);
-            });
+                peer.on('open', () => {
+                    console.log('Peer已打开,准备连接到:', targetPeerId);
+                    updateStatus('connecting', '正在连接到对方设备...');
+                    conn = peer.connect(targetPeerId, {
+                        reliable: true
+                    });
+                    setupConnection();
+                });
+
+                peer.on('error', (error) => {
+                    console.error('Peer错误:', error);
+                    if (error.type === 'peer-unavailable') {
+                        updateStatus('disconnected', '对方设备不在线');
+                    } else {
+                        updateStatus('disconnected', '连接错误: ' + error.type);
+                    }
+                });
+            }
         }
 
         // 设置连接
