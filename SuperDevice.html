@@ -419,6 +419,16 @@
                 return;
             }
 
+            // 检查jsQR库是否加载
+            if (typeof jsQR === 'undefined') {
+                console.error('jsQR库未加载!');
+                scanStatus.textContent = '扫码库加载失败,请使用手动连接';
+                scanStatus.style.color = '#dc3545';
+                return;
+            }
+            
+            console.log('jsQR库已加载,版本:', jsQR.version || '未知');
+
             scanStatus.textContent = '正在启动摄像头...';
             startScanBtn.textContent = '停止扫描';
 
@@ -446,6 +456,8 @@
                     scanStatus.textContent = '请将二维码对准扫描框';
                     scanStatus.style.color = '#666';
                     
+                    console.log('摄像头已启动,视频尺寸:', video.videoWidth, 'x', video.videoHeight);
+                    
                     // 开始扫描
                     let scanCount = 0;
                     scannerInterval = setInterval(() => {
@@ -466,7 +478,9 @@
                                 code = jsQR(imageData.data, imageData.width, imageData.height, {
                                     inversionAttempts: 'dontInvert'
                                 });
-                            } catch (e) {}
+                            } catch (e) {
+                                if (scanCount === 1) console.error('jsQR模式1错误:', e);
+                            }
                             
                             // 模式2: 尝试反转(如果模式1失败)
                             if (!code) {
@@ -474,7 +488,9 @@
                                     code = jsQR(imageData.data, imageData.width, imageData.height, {
                                         inversionAttempts: 'onlyInvert'
                                     });
-                                } catch (e) {}
+                                } catch (e) {
+                                    if (scanCount === 1) console.error('jsQR模式2错误:', e);
+                                }
                             }
                             
                             // 模式3: 尝试两种模式(如果前两种都失败)
@@ -483,11 +499,14 @@
                                     code = jsQR(imageData.data, imageData.width, imageData.height, {
                                         inversionAttempts: 'attemptBoth'
                                     });
-                                } catch (e) {}
+                                } catch (e) {
+                                    if (scanCount === 1) console.error('jsQR模式3错误:', e);
+                                }
                             }
 
                             if (code) {
-                                console.log('扫描到二维码:', code.data);
+                                console.log('✓ 扫描到二维码:', code.data);
+                                console.log('  位置:', code.location);
                                 // 扫描成功
                                 scanStatus.textContent = '扫描成功!正在连接...';
                                 scanStatus.style.color = '#28a745';
@@ -523,7 +542,7 @@
                             
                             // 每30次扫描显示一次提示
                             if (scanCount % 30 === 0) {
-                                console.log('已扫描', scanCount, '次,视频尺寸:', video.videoWidth, 'x', video.videoHeight);
+                                console.log('扫描中... 已扫描', scanCount, '次');
                             }
                         }
                     }, 100); // 每100ms扫描一次
