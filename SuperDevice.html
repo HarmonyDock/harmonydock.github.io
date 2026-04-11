@@ -290,20 +290,12 @@
                 <input type="file" id="fileInput" multiple>
             </div>
             
-            <button onclick="sendClipboard()" class="btn" style="width: 100%; margin-top: 10px; font-size: 16px; padding: 12px; background: linear-gradient(135deg, #00C853 0%, #00A844 100%);">发送剪贴板内容</button>
-            
             <div id="progressContainer" class="progress-container">
                 <div class="progress-bar">
                     <div id="progressFill" class="progress-fill"></div>
                 </div>
                 <div id="progressText" class="progress-text">准备传输...</div>
             </div>
-        </div>
-
-        <!-- 接收到的剪贴板内容 -->
-        <div id="receivedClipboard" style="display: none; margin-top: 30px; text-align: left;">
-            <h3>接收到的剪贴板内容:</h3>
-            <div id="clipboardList" style="max-height: 300px; overflow-y: auto;"></div>
         </div>
 
         <div id="receivedFiles" class="received-files" style="display: none;">
@@ -581,9 +573,6 @@
                 } else if (message.type === 'file-end') {
                     // 文件传输完成
                     saveReceivedFile();
-                } else if (message.type === 'clipboard') {
-                    // 接收剪贴板内容
-                    displayReceivedClipboard(message.content);
                 }
             } else {
                 // 接收文件数据块
@@ -698,107 +687,6 @@
             }
             fileInput.value = '';
         });
-
-        // 发送剪贴板内容
-        async function sendClipboard() {
-            if (!conn || !conn.open) {
-                alert('未连接到对方设备');
-                return;
-            }
-
-            try {
-                // 读取剪贴板内容
-                const text = await navigator.clipboard.readText();
-                
-                if (!text) {
-                    alert('剪贴板为空');
-                    return;
-                }
-
-                // 发送剪贴板内容
-                conn.send(JSON.stringify({
-                    type: 'clipboard',
-                    content: text
-                }));
-
-                // 显示发送成功提示
-                const btn = event.target;
-                const originalText = btn.textContent;
-                btn.textContent = '已发送!';
-                btn.style.background = 'linear-gradient(135deg, #007DFF 0%, #0058D6 100%)';
-                
-                setTimeout(() => {
-                    btn.textContent = originalText;
-                    btn.style.background = 'linear-gradient(135deg, #00C853 0%, #00A844 100%)';
-                }, 2000);
-
-            } catch (error) {
-                console.error('读取剪贴板失败:', error);
-                if (error.name === 'NotAllowedError') {
-                    alert('请允许访问剪贴板权限');
-                } else {
-                    alert('无法读取剪贴板内容');
-                }
-            }
-        }
-
-        // 显示接收到的剪贴板内容
-        function displayReceivedClipboard(text) {
-            const receivedClipboard = document.getElementById('receivedClipboard');
-            const clipboardList = document.getElementById('clipboardList');
-
-            receivedClipboard.style.display = 'block';
-
-            const clipboardItem = document.createElement('div');
-            clipboardItem.style.cssText = 'padding: 15px; margin: 10px 0; background: #e8f5e9; border-radius: 8px; border-left: 4px solid #00C853; position: relative;';
-            
-            // 截取前100个字符预览
-            const preview = text.length > 100 ? text.substring(0, 100) + '...' : text;
-            
-            clipboardItem.innerHTML = `
-                <div style="font-size: 12px; color: #00C853; margin-bottom: 8px;">
-                    ${new Date().toLocaleTimeString()} · ${text.length} 字符
-                </div>
-                <div style="color: #333; word-wrap: break-word; margin-bottom: 10px; font-family: monospace; font-size: 14px;">
-                    ${escapeHtml(preview)}
-                </div>
-                <button onclick="copyToClipboard(this)" data-text="${escapeHtml(text)}" style="background: #00C853; color: white; border: none; padding: 6px 15px; border-radius: 15px; cursor: pointer; font-size: 12px;">
-                    复制到剪贴板
-                </button>
-            `;
-            clipboardList.appendChild(clipboardItem);
-
-            // 滚动到底部
-            clipboardList.scrollTop = clipboardList.scrollHeight;
-        }
-
-        // 复制到剪贴板
-        async function copyToClipboard(button) {
-            const text = button.getAttribute('data-text');
-            
-            try {
-                await navigator.clipboard.writeText(text);
-                
-                const originalText = button.textContent;
-                button.textContent = '已复制!';
-                button.style.background = '#007DFF';
-                
-                setTimeout(() => {
-                    button.textContent = originalText;
-                    button.style.background = '#00C853';
-                }, 2000);
-            } catch (error) {
-                console.error('复制失败:', error);
-                alert('复制失败');
-            }
-        }
-
-        // HTML转义
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
 
         // 启动
         init();
