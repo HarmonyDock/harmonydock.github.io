@@ -290,6 +290,8 @@
                 <input type="file" id="fileInput" multiple>
             </div>
             
+            <button onclick="sendClipboard()" class="btn" style="width: 100%; margin-top: 10px; font-size: 16px; padding: 12px; background: linear-gradient(135deg, #00C853 0%, #00A844 100%);">发送剪贴板内容</button>
+            
             <div id="progressContainer" class="progress-container">
                 <div class="progress-bar">
                     <div id="progressFill" class="progress-fill"></div>
@@ -298,17 +300,10 @@
             </div>
         </div>
 
-        <!-- 文字传输区域 -->
-        <div id="textSection" class="file-section">
-            <textarea id="textInput" placeholder="输入要发送的文字..." rows="3"
-                      style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 10px; font-size: 16px; resize: vertical; font-family: inherit;"></textarea>
-            <button onclick="sendText()" class="btn" style="width: 100%; margin-top: 10px; font-size: 16px; padding: 12px;">发送文字</button>
-        </div>
-
-        <!-- 接收到的消息 -->
-        <div id="receivedMessages" style="display: none; margin-top: 30px; text-align: left;">
-            <h3>接收到的消息:</h3>
-            <div id="messageList" style="max-height: 300px; overflow-y: auto;"></div>
+        <!-- 接收到的剪贴板内容 -->
+        <div id="receivedClipboard" style="display: none; margin-top: 30px; text-align: left;">
+            <h3>接收到的剪贴板内容:</h3>
+            <div id="clipboardList" style="max-height: 300px; overflow-y: auto;"></div>
         </div>
 
         <div id="receivedFiles" class="received-files" style="display: none;">
@@ -586,9 +581,9 @@
                 } else if (message.type === 'file-end') {
                     // 文件传输完成
                     saveReceivedFile();
-                } else if (message.type === 'text') {
-                    // 接收文字消息
-                    displayReceivedMessage(message.content);
+                } else if (message.type === 'clipboard') {
+                    // 接收剪贴板内容
+                    displayReceivedClipboard(message.content);
                 }
             } else {
                 // 接收文件数据块
@@ -704,72 +699,101 @@
             fileInput.value = '';
         });
 
-        // 发送文字消息
-        function sendText() {
-            const textInput = document.getElementById('textInput');
-            const text = textInput.value.trim();
-            
-            if (!text) {
-                return;
-            }
-            
+        // 发送剪贴板内容
+        async function sendClipboard() {
             if (!conn || !conn.open) {
                 alert('未连接到对方设备');
                 return;
             }
-            
-            // 发送文字消息
-            conn.send(JSON.stringify({
-                type: 'text',
-                content: text
-            }));
-            
-            // 显示发送的消息
-            displaySentMessage(text);
-            
-            // 清空输入框
-            textInput.value = '';
+
+            try {
+                // 读取剪贴板内容
+                const text = await navigator.clipboard.readText();
+                
+                if (!text) {
+                    alert('剪贴板为空');
+                    return;
+                }
+
+                // 发送剪贴板内容
+                conn.send(JSON.stringify({
+                    type: 'clipboard',
+                    content: text
+                }));
+
+                // 显示发送成功提示
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '已发送!';
+                btn.style.background = 'linear-gradient(135deg, #007DFF 0%, #0058D6 100%)';
+                
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.background = 'linear-gradient(135deg, #00C853 0%, #00A844 100%)';
+                }, 2000);
+
+            } catch (error) {
+                console.error('读取剪贴板失败:', error);
+                if (error.name === 'NotAllowedError') {
+                    alert('请允许访问剪贴板权限');
+                } else {
+                    alert('无法读取剪贴板内容');
+                }
+            }
         }
 
-        // 显示发送的消息
-        function displaySentMessage(text) {
-            const receivedMessages = document.getElementById('receivedMessages');
-            const messageList = document.getElementById('messageList');
+        // 显示接收到的剪贴板内容
+        function displayReceivedClipboard(text) {
+            const receivedClipboard = document.getElementById('receivedClipboard');
+            const clipboardList = document.getElementById('clipboardList');
+
+            receivedClipboard.style.display = 'block';
+
+            const clipboardItem = document.createElement('div');
+            clipboardItem.style.cssText = 'padding: 15px; margin: 10px 0; background: #e8f5e9; border-radius: 8px; border-left: 4px solid #00C853; position: relative;';
             
-            receivedMessages.style.display = 'block';
+            // 截取前100个字符预览
+            const preview = text.length > 100 ? text.substring(0, 100) + '...' : text;
             
-            const messageItem = document.createElement('div');
-            messageItem.style.cssText = 'padding: 10px; margin: 10px 0; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #007DFF;';
-            messageItem.innerHTML = `
-                <div style="font-size: 12px; color: #007DFF; margin-bottom: 5px;">我 · ${new Date().toLocaleTimeString()}</div>
-                <div style="color: #333; word-wrap: break-word;">${escapeHtml(text)}</div>
+            clipboardItem.innerHTML = `
+                <div style="font-size: 12px; color: #00C853; margin-bottom: 8px;">
+                    ${new Date().toLocaleTimeString()} · ${text.length} 字符
+                </div>
+                <div style="color: #333; word-wrap: break-word; margin-bottom: 10px; font-family: monospace; font-size: 14px;">
+                    ${escapeHtml(preview)}
+                </div>
+                <button onclick="copyToClipboard(this)" data-text="${escapeHtml(text)}" style="background: #00C853; color: white; border: none; padding: 6px 15px; border-radius: 15px; cursor: pointer; font-size: 12px;">
+                    复制到剪贴板
+                </button>
             `;
-            messageList.appendChild(messageItem);
-            
+            clipboardList.appendChild(clipboardItem);
+
             // 滚动到底部
-            messageList.scrollTop = messageList.scrollHeight;
+            clipboardList.scrollTop = clipboardList.scrollHeight;
         }
 
-        // 显示接收到的消息
-        function displayReceivedMessage(text) {
-            const receivedMessages = document.getElementById('receivedMessages');
-            const messageList = document.getElementById('messageList');
+        // 复制到剪贴板
+        async function copyToClipboard(button) {
+            const text = button.getAttribute('data-text');
             
-            receivedMessages.style.display = 'block';
-            
-            const messageItem = document.createElement('div');
-            messageItem.style.cssText = 'padding: 10px; margin: 10px 0; background: #f5f5f5; border-radius: 8px; border-left: 4px solid #666;';
-            messageItem.innerHTML = `
-                <div style="font-size: 12px; color: #666; margin-bottom: 5px;">对方 · ${new Date().toLocaleTimeString()}</div>
-                <div style="color: #333; word-wrap: break-word;">${escapeHtml(text)}</div>
-            `;
-            messageList.appendChild(messageItem);
-            
-            // 滚动到底部
-            messageList.scrollTop = messageList.scrollHeight;
+            try {
+                await navigator.clipboard.writeText(text);
+                
+                const originalText = button.textContent;
+                button.textContent = '已复制!';
+                button.style.background = '#007DFF';
+                
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.style.background = '#00C853';
+                }, 2000);
+            } catch (error) {
+                console.error('复制失败:', error);
+                alert('复制失败');
+            }
         }
 
-        // HTML转义,防止XSS
+        // HTML转义
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
