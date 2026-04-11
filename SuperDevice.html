@@ -416,49 +416,93 @@
             scanStatus.textContent = '正在启动摄像头...';
             startScanBtn.textContent = '停止扫描';
 
+            // 检查是否支持摄像头
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                scanStatus.textContent = '您的浏览器不支持摄像头访问';
+                startScanBtn.textContent = '开始扫描';
+                return;
+            }
+
             navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'environment' } // 使用后置摄像头
+                video: { 
+                    facingMode: 'environment', // 使用后置摄像头
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                }
             }).then(stream => {
                 scannerStream = stream;
                 video.srcObject = stream;
                 video.style.display = 'block';
-                video.play();
-
-                scanStatus.textContent = '请将二维码对准摄像头';
-
-                // 开始扫描
-                scannerInterval = setInterval(() => {
-                    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                        canvas.width = video.videoWidth;
-                        canvas.height = video.videoHeight;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        
-                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                        const code = jsQR(imageData.data, imageData.width, imageData.height, {
-                            inversionAttempts: 'dontInvert'
-                        });
-
-                        if (code) {
-                            // 扫描成功
-                            scanStatus.textContent = '扫描成功!';
-                            stopScanner();
+                
+                video.onloadedmetadata = () => {
+                    video.play();
+                    scanStatus.textContent = '请将二维码对准摄像头';
+                    
+                    // 开始扫描
+                    let scanCount = 0;
+                    scannerInterval = setInterval(() => {
+                        scanCount++;
+                        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                            canvas.width = video.videoWidth;
+                            canvas.height = video.videoHeight;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                             
-                            // 解析URL获取peer ID
-                            const url = new URL(code.data);
-                            const peerId = url.searchParams.get('peer');
+                            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                             
-                            if (peerId) {
-                                connectToPeer(peerId);
-                            } else {
-                                scanStatus.textContent = '无效的二维码';
+                            try {
+                                const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                                    inversionAttempts: 'dontInvert'
+                                });
+
+                                if (code) {
+                                    console.log('扫描到二维码:', code.data);
+                                    // 扫描成功
+                                    scanStatus.textContent = '扫描成功!';
+                                    stopScanner();
+                                    
+                                    // 解析URL获取peer ID
+                                    try {
+                                        const scannedUrl = new URL(code.data);
+                                        const peerId = scannedUrl.searchParams.get('peer');
+                                        
+                                        console.log('解析到的Peer ID:', peerId);
+                                        
+                                        if (peerId) {
+                                            connectToPeer(peerId);
+                                        } else {
+                                            scanStatus.textContent = '无效的二维码:未找到连接ID';
+                                            scanStatus.style.color = '#dc3545';
+                                        }
+                                    } catch (e) {
+                                        console.error('URL解析失败:', e);
+                                        scanStatus.textContent = '无效的二维码格式';
+                                        scanStatus.style.color = '#dc3545';
+                                    }
+                                }
+                            } catch (e) {
+                                console.error('jsQR解析错误:', e);
+                            }
+                            
+                            // 每50次扫描显示一次提示
+                            if (scanCount % 50 === 0) {
+                                console.log('已扫描', scanCount, '次');
                             }
                         }
-                    }
-                }, 100);
+                    }, 100);
+                };
             }).catch(error => {
                 console.error('摄像头访问失败:', error);
-                scanStatus.textContent = '无法访问摄像头,请使用手动连接';
+                let errorMsg = '无法访问摄像头';
+                if (error.name === 'NotAllowedError') {
+                    errorMsg = '摄像头权限被拒绝,请在浏览器设置中允许访问';
+                } else if (error.name === 'NotFoundError') {
+                    errorMsg = '未找到摄像头设备';
+                } else if (error.name === 'NotReadableError') {
+                    errorMsg = '摄像头被其他应用占用';
+                }
+                scanStatus.textContent = errorMsg + ',请使用手动连接';
+                scanStatus.style.color = '#dc3545';
                 startScanBtn.textContent = '开始扫描';
             });
         }
@@ -630,61 +674,24 @@
             const qrcodeEl = document.getElementById('qrcode');
             qrcodeEl.innerHTML = '';
 
-            // 使用qrcode-generator库生成二维码
-            try {
-                // 创建QR码对象
-                const qr = qrcode(0, 'M');
-                qr.addData(url);
-                qr.make();
-                
-                // 创建canvas
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                
-                const moduleCount = qr.getModuleCount();
-                const cellSize = Math.floor(200 / moduleCount);
-                const margin = Math.floor((200 - cellSize * moduleCount) / 2);
-                
-                canvas.width = 200;
-                canvas.height = 200;
-                
-                // 绘制白色背景
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                
-                // 绘制黑色模块
-                ctx.fillStyle = '#000000';
-                for (let row = 0; row < moduleCount; row++) {
-                    for (let col = 0; col < moduleCount; col++) {
-                        if (qr.isDark(row, col)) {
-                            ctx.fillRect(
-                                margin + col * cellSize,
-                                margin + row * cellSize,
-                                cellSize,
-                                cellSize
-                            );
-                        }
-                    }
-                }
-                
-                qrcodeEl.appendChild(canvas);
+            // 直接使用在线API生成二维码(更可靠)
+            const qrImage = document.createElement('img');
+            qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
+            qrImage.alt = 'QR Code';
+            qrImage.style.width = '200px';
+            qrImage.style.height = '200px';
+            qrImage.style.borderRadius = '10px';
+            
+            qrImage.onload = () => {
                 console.log('二维码生成成功');
-            } catch (error) {
-                console.error('二维码生成异常:', error);
-                // 如果二维码生成失败,使用在线API
-                try {
-                    const qrImage = document.createElement('img');
-                    qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
-                    qrImage.alt = 'QR Code';
-                    qrImage.style.width = '200px';
-                    qrImage.style.height = '200px';
-                    qrcodeEl.appendChild(qrImage);
-                    console.log('使用在线API生成二维码');
-                } catch (e) {
-                    console.error('在线API也失败:', e);
-                    qrcodeEl.innerHTML = '<p style="color: #666; font-size: 14px;">请使用连接ID进行连接</p>';
-                }
-            }
+            };
+            
+            qrImage.onerror = () => {
+                console.error('二维码生成失败');
+                qrcodeEl.innerHTML = '<p style="color: #666; font-size: 14px;">二维码生成失败,请使用连接ID</p>';
+            };
+            
+            qrcodeEl.appendChild(qrImage);
 
             peerIdDisplay.textContent = peerId;
             qrContainer.style.display = 'block';
