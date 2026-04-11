@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>跨设备文件传输</title>
+    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.1/qrcode.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .status.connecting {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .qr-container {
+            margin: 30px 0;
+            display: none;
+        }
+
+        #qrcode {
+            display: inline-block;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .peer-id {
+            margin-top: 15px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            word-break: break-all;
+        }
+
+        .file-section {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            cursor: pointer;
+            width: 100%;
+            height: 100%;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: inline-block;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .progress-container {
+            margin-top: 20px;
+            display: none;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+            width: 0%;
+        }
+
+        .progress-text {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .received-files {
+            margin-top: 30px;
+            text-align: left;
+        }
+
+        .received-files h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .file-item-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            margin-right: 10px;
+        }
+
+        .file-item-size {
+            color: #666;
+            font-size: 12px;
+            margin-right: 10px;
+        }
+
+        .download-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 6px 15px;
+            border-radius: 15px;
+            cursor: pointer;
+            font-size: 12px;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .instructions {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            text-align: left;
+        }
+
+        .instructions h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .instructions ol {
+            margin-left: 20px;
+            color: #666;
+        }
+
+        .instructions li {
+            margin-bottom: 8px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>跨设备文件传输</h1>
+        <p class="subtitle">使用WebRTC实现安全的点对点文件传输</p>
+        
+        <div id="status" class="status connecting">
+            <span class="loading"></span>正在连接信令服务器...
+        </div>
+
+        <div id="qrContainer" class="qr-container">
+            <div id="qrcode"></div>
+            <div class="peer-id">
+                <strong>连接ID:</strong> <span id="peerIdDisplay"></span>
+            </div>
+        </div>
+
+        <div id="fileSection" class="file-section">
+            <div class="file-input-wrapper">
+                <button class="btn">选择文件</button>
+                <input type="file" id="fileInput" multiple>
+            </div>
+            
+            <div id="progressContainer" class="progress-container">
+                <div class="progress-bar">
+                    <div id="progressFill" class="progress-fill"></div>
+                </div>
+                <div id="progressText" class="progress-text">准备传输...</div>
+            </div>
+        </div>
+
+        <div id="receivedFiles" class="received-files" style="display: none;">
+            <h3>接收到的文件:</h3>
+            <div id="fileList"></div>
+        </div>
+
+        <div class="instructions">
+            <h3>使用说明:</h3>
+            <ol>
+                <li><strong>电脑端:</strong> 打开此页面,等待二维码生成</li>
+                <li><strong>手机端:</strong> 使用手机扫描二维码或输入连接ID</li>
+                <li>连接建立后,双方可以互相发送文件</li>
+                <li>文件通过WebRTC直接传输,不经过服务器</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        // 配置
+        const CHUNK_SIZE = 16384; // 16KB chunks
+
+        // 状态
+        let peer = null;
+        let conn = null;
+        let currentFile = null;
+        let receivedChunks = [];
+        let receivedSize = 0;
+        let totalSize = 0;
+
+        // DOM元素
+        const statusEl = document.getElementById('status');
+        const qrContainer = document.getElementById('qrContainer');
+        const peerIdDisplay = document.getElementById('peerIdDisplay');
+        const fileSection = document.getElementById('fileSection');
+        const fileInput = document.getElementById('fileInput');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const receivedFilesEl = document.getElementById('receivedFiles');
+        const fileListEl = document.getElementById('fileList');
+
+        // 初始化
+        function init() {
+            // 检查URL参数
+            const urlParams = new URLSearchParams(window.location.search);
+            const targetPeerId = urlParams.get('peer');
+
+            if (targetPeerId) {
+                // 如果URL中有目标peer ID,说明是接收端(手机)
+                connectToPeer(targetPeerId);
+            } else {
+                // 否则是发起端(电脑),显示二维码
+                createPeer();
+            }
+        }
+
+        // 创建Peer(电脑端)
+        function createPeer() {
+            updateStatus('connecting', '正在连接信令服务器...');
+
+            // 创建Peer,使用配置选项
+            peer = new Peer({
+                debug: 2 // 开启调试日志
+            });
+
+            peer.on('open', (id) => {
+                console.log('Peer已打开,ID:', id);
+                if (!id) {
+                    console.error('Peer ID为空!');
+                    updateStatus('disconnected', '获取连接ID失败');
+                    return;
+                }
+                updateStatus('connected', '已连接到信令服务器');
+                showQRCode(id);
+            });
+
+            peer.on('connection', (connection) => {
+                console.log('收到连接请求:', connection.peer);
+                conn = connection;
+                setupConnection();
+            });
+
+            peer.on('error', (error) => {
+                console.error('Peer错误:', error);
+                if (error.type === 'peer-unavailable') {
+                    updateStatus('disconnected', '对方设备不在线');
+                } else if (error.type === 'unavailable-id') {
+                    updateStatus('disconnected', '连接ID不可用,请刷新页面重试');
+                } else if (error.type === 'browser-incompatible') {
+                    updateStatus('disconnected', '浏览器不支持WebRTC');
+                } else {
+                    updateStatus('disconnected', '连接错误: ' + error.type);
+                }
+            });
+
+            peer.on('disconnected', () => {
+                console.log('Peer已断开');
+                updateStatus('disconnected', '已断开连接');
+            });
+
+            peer.on('close', () => {
+                console.log('Peer已关闭');
+                updateStatus('disconnected', '连接已关闭');
+            });
+        }
+
+        // 连接到Peer(手机端)
+        function connectToPeer(targetPeerId) {
+            updateStatus('connecting', '正在连接到对方设备...');
+
+            peer = new Peer();
+
+            peer.on('open', () => {
+                conn = peer.connect(targetPeerId, {
+                    reliable: true
+                });
+                setupConnection();
+            });
+
+            peer.on('error', (error) => {
+                console.error('Peer错误:', error);
+                updateStatus('disconnected', '连接错误: ' + error.type);
+            });
+        }
+
+        // 设置连接
+        function setupConnection() {
+            conn.on('open', () => {
+                updateStatus('connected', '已连接到对方设备,可以传输文件');
+                fileSection.style.display = 'block';
+            });
+
+            conn.on('data', (data) => {
+                handleData(data);
+            });
+
+            conn.on('close', () => {
+                updateStatus('disconnected', '连接已断开');
+                fileSection.style.display = 'none';
+            });
+
+            conn.on('error', (error) => {
+                console.error('连接错误:', error);
+                updateStatus('disconnected', '连接错误');
+            });
+        }
+
+        // 显示二维码
+        function showQRCode(peerId) {
+            console.log('显示二维码,Peer ID:', peerId);
+            
+            const url = `${window.location.href.split('?')[0]}?peer=${peerId}`;
+            console.log('二维码URL:', url);
+
+            // 清空之前的二维码
+            const qrcodeEl = document.getElementById('qrcode');
+            qrcodeEl.innerHTML = '';
+
+            // 使用qrcode-generator库生成二维码
+            try {
+                // 创建QR码对象
+                const qr = qrcode(0, 'M');
+                qr.addData(url);
+                qr.make();
+                
+                // 创建canvas
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                const moduleCount = qr.getModuleCount();
+                const cellSize = Math.floor(200 / moduleCount);
+                const margin = Math.floor((200 - cellSize * moduleCount) / 2);
+                
+                canvas.width = 200;
+                canvas.height = 200;
+                
+                // 绘制白色背景
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // 绘制黑色模块
+                ctx.fillStyle = '#000000';
+                for (let row = 0; row < moduleCount; row++) {
+                    for (let col = 0; col < moduleCount; col++) {
+                        if (qr.isDark(row, col)) {
+                            ctx.fillRect(
+                                margin + col * cellSize,
+                                margin + row * cellSize,
+                                cellSize,
+                                cellSize
+                            );
+                        }
+                    }
+                }
+                
+                qrcodeEl.appendChild(canvas);
+                console.log('二维码生成成功');
+            } catch (error) {
+                console.error('二维码生成异常:', error);
+                // 如果二维码生成失败,使用在线API
+                try {
+                    const qrImage = document.createElement('img');
+                    qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
+                    qrImage.alt = 'QR Code';
+                    qrImage.style.width = '200px';
+                    qrImage.style.height = '200px';
+                    qrcodeEl.appendChild(qrImage);
+                    console.log('使用在线API生成二维码');
+                } catch (e) {
+                    console.error('在线API也失败:', e);
+                    qrcodeEl.innerHTML = '<p style="color: #666; font-size: 14px;">请使用连接ID进行连接</p>';
+                }
+            }
+
+            peerIdDisplay.textContent = peerId;
+            qrContainer.style.display = 'block';
+            console.log('二维码容器已显示');
+
+            // 添加手动连接输入框
+            addManualConnect(peerId);
+        }
+
+        // 添加手动连接
+        function addManualConnect(myPeerId) {
+            const container = document.querySelector('.container');
+            const manualConnect = document.createElement('div');
+            manualConnect.id = 'manualConnectSection';
+            manualConnect.innerHTML = `
+                <div style="margin-top: 30px; padding: 20px; background: #fff3cd; border-radius: 10px;">
+                    <h3 style="margin-bottom: 10px;">手动连接</h3>
+                    <p style="margin-bottom: 15px; font-size: 14px; color: #856404;">
+                        如果二维码无法扫描,请在另一设备上输入以下连接ID:
+                    </p>
+                    <div style="background: #fff; padding: 10px; border-radius: 5px; margin-bottom: 15px; font-family: monospace; word-break: break-all;">
+                        ${myPeerId}
+                    </div>
+                    <p style="margin-bottom: 10px; font-size: 14px; color: #856404;">
+                        或输入对方连接ID:
+                    </p>
+                    <input type="text" id="connectInput" placeholder="输入对方连接ID"
+                           style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 10px;">
+                    <button onclick="manualConnect()" class="btn">连接</button>
+                </div>
+            `;
+            container.insertBefore(manualConnect, document.querySelector('.instructions'));
+        }
+
+        // 手动连接
+        function manualConnect() {
+            const targetPeerId = document.getElementById('connectInput').value.trim();
+            if (targetPeerId) {
+                if (conn) {
+                    conn.close();
+                }
+                conn = peer.connect(targetPeerId, {
+                    reliable: true
+                });
+                setupConnection();
+            }
+        }
+
+        // 处理接收的数据
+        function handleData(data) {
+            if (typeof data === 'string') {
+                const message = JSON.parse(data);
+
+                if (message.type === 'file-meta') {
+                    // 接收文件元数据
+                    currentFile = {
+                        name: message.name,
+                        size: message.size,
+                        mimeType: message.mimeType
+                    };
+                    receivedChunks = [];
+                    receivedSize = 0;
+                    totalSize = message.size;
+
+                    progressContainer.style.display = 'block';
+                    updateProgress(0, `接收: ${currentFile.name}`);
+                } else if (message.type === 'file-end') {
+                    // 文件传输完成
+                    saveReceivedFile();
+                }
+            } else {
+                // 接收文件数据块
+                receivedChunks.push(data);
+                receivedSize += data.byteLength;
+
+                const percent = Math.round((receivedSize / totalSize) * 100);
+                updateProgress(percent, `接收: ${currentFile.name} (${formatSize(receivedSize)}/${formatSize(totalSize)})`);
+            }
+        }
+
+        // 保存接收到的文件
+        function saveReceivedFile() {
+            const blob = new Blob(receivedChunks, { type: currentFile.mimeType });
+            const url = URL.createObjectURL(blob);
+
+            // 显示在文件列表中
+            receivedFilesEl.style.display = 'block';
+
+            const fileItem = document.createElement('div');
+            fileItem.className = 'file-item';
+            fileItem.innerHTML = `
+                <span class="file-item-name">${currentFile.name}</span>
+                <span class="file-item-size">${formatSize(currentFile.size)}</span>
+                <a href="${url}" download="${currentFile.name}" class="download-btn">下载</a>
+            `;
+            fileListEl.appendChild(fileItem);
+
+            // 重置状态
+            currentFile = null;
+            receivedChunks = [];
+            receivedSize = 0;
+            totalSize = 0;
+
+            progressContainer.style.display = 'none';
+        }
+
+        // 发送文件
+        function sendFile(file) {
+            if (!conn || !conn.open) {
+                alert('未连接到对方设备');
+                return;
+            }
+
+            // 发送文件元数据
+            conn.send(JSON.stringify({
+                type: 'file-meta',
+                name: file.name,
+                size: file.size,
+                mimeType: file.type || 'application/octet-stream'
+            }));
+
+            // 分块发送文件
+            const reader = new FileReader();
+            let offset = 0;
+
+            reader.onload = (event) => {
+                conn.send(event.target.result);
+                offset += event.target.result.byteLength;
+
+                const percent = Math.round((offset / file.size) * 100);
+                updateProgress(percent, `发送: ${file.name} (${formatSize(offset)}/${formatSize(file.size)})`);
+
+                if (offset < file.size) {
+                    readNextChunk();
+                } else {
+                    // 发送结束标记
+                    conn.send(JSON.stringify({ type: 'file-end' }));
+                    progressContainer.style.display = 'none';
+                }
+            };
+
+            const readNextChunk = () => {
+                const slice = file.slice(offset, offset + CHUNK_SIZE);
+                reader.readAsArrayBuffer(slice);
+            };
+
+            progressContainer.style.display = 'block';
+            readNextChunk();
+        }
+
+        // 更新进度
+        function updateProgress(percent, text) {
+            progressFill.style.width = `${percent}%`;
+            progressText.textContent = text;
+        }
+
+        // 更新状态
+        function updateStatus(type, message) {
+            statusEl.className = `status ${type}`;
+            if (type === 'connecting') {
+                statusEl.innerHTML = `<span class="loading"></span>${message}`;
+            } else {
+                statusEl.textContent = message;
+            }
+        }
+
+        // 格式化文件大小
+        function formatSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        // 文件选择事件
+        fileInput.addEventListener('change', (event) => {
+            const files = event.target.files;
+            for (let i = 0; i < files.length; i++) {
+                sendFile(files[i]);
+            }
+            fileInput.value = '';
+        });
+
+        // 启动
+        init();
+    </script>
+</body>
+</html>
