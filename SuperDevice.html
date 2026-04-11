@@ -6,6 +6,7 @@
     <title>跨设备文件传输</title>
     <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.1/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.2/dist/jsQR.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -272,6 +273,14 @@
             </div>
         </div>
 
+        <div id="scannerContainer" style="display: none; margin: 30px 0;">
+            <h3 style="margin-bottom: 15px;">扫描二维码</h3>
+            <video id="scannerVideo" style="width: 100%; max-width: 300px; border-radius: 10px; display: none;"></video>
+            <canvas id="scannerCanvas" style="display: none;"></canvas>
+            <button id="startScanBtn" class="btn" style="margin-top: 15px;">开始扫描</button>
+            <div id="scanStatus" style="margin-top: 10px; color: #666; font-size: 14px;"></div>
+        </div>
+
         <div id="fileSection" class="file-section">
             <div class="file-input-wrapper">
                 <button class="btn">选择文件</button>
@@ -336,8 +345,139 @@
                 // 如果URL中有目标peer ID,说明是接收端(手机)
                 connectToPeer(targetPeerId);
             } else {
-                // 否则是发起端(电脑),显示二维码
-                createPeer();
+                // 检测设备类型
+                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                
+                if (isMobile) {
+                    // 手机端:显示扫码功能
+                    showScanner();
+                } else {
+                    // 电脑端:显示二维码
+                    createPeer();
+                }
+            }
+        }
+
+        // 显示扫码功能(手机端)
+        function showScanner() {
+            const scannerContainer = document.getElementById('scannerContainer');
+            scannerContainer.style.display = 'block';
+            
+            const startScanBtn = document.getElementById('startScanBtn');
+            startScanBtn.addEventListener('click', startScanner);
+            
+            // 同时显示手动连接选项
+            addManualConnectOption();
+        }
+
+        // 开始扫描
+        let scannerStream = null;
+        let scannerInterval = null;
+
+        function startScanner() {
+            const video = document.getElementById('scannerVideo');
+            const canvas = document.getElementById('scannerCanvas');
+            const scanStatus = document.getElementById('scanStatus');
+            const startScanBtn = document.getElementById('startScanBtn');
+
+            if (scannerStream) {
+                // 停止扫描
+                stopScanner();
+                return;
+            }
+
+            scanStatus.textContent = '正在启动摄像头...';
+            startScanBtn.textContent = '停止扫描';
+
+            navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'environment' } // 使用后置摄像头
+            }).then(stream => {
+                scannerStream = stream;
+                video.srcObject = stream;
+                video.style.display = 'block';
+                video.play();
+
+                scanStatus.textContent = '请将二维码对准摄像头';
+
+                // 开始扫描
+                scannerInterval = setInterval(() => {
+                    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                            inversionAttempts: 'dontInvert'
+                        });
+
+                        if (code) {
+                            // 扫描成功
+                            scanStatus.textContent = '扫描成功!';
+                            stopScanner();
+                            
+                            // 解析URL获取peer ID
+                            const url = new URL(code.data);
+                            const peerId = url.searchParams.get('peer');
+                            
+                            if (peerId) {
+                                connectToPeer(peerId);
+                            } else {
+                                scanStatus.textContent = '无效的二维码';
+                            }
+                        }
+                    }
+                }, 100);
+            }).catch(error => {
+                console.error('摄像头访问失败:', error);
+                scanStatus.textContent = '无法访问摄像头,请使用手动连接';
+                startScanBtn.textContent = '开始扫描';
+            });
+        }
+
+        // 停止扫描
+        function stopScanner() {
+            if (scannerInterval) {
+                clearInterval(scannerInterval);
+                scannerInterval = null;
+            }
+            
+            if (scannerStream) {
+                scannerStream.getTracks().forEach(track => track.stop());
+                scannerStream = null;
+            }
+
+            const video = document.getElementById('scannerVideo');
+            const startScanBtn = document.getElementById('startScanBtn');
+            video.style.display = 'none';
+            startScanBtn.textContent = '开始扫描';
+        }
+
+        // 添加手动连接选项
+        function addManualConnectOption() {
+            const container = document.querySelector('.container');
+            const manualConnect = document.createElement('div');
+            manualConnect.innerHTML = `
+                <div style="margin-top: 30px; padding: 20px; background: #fff3cd; border-radius: 10px;">
+                    <h3 style="margin-bottom: 10px;">手动连接</h3>
+                    <p style="margin-bottom: 15px; font-size: 14px; color: #856404;">
+                        如果无法扫描二维码,请输入对方显示的连接ID:
+                    </p>
+                    <input type="text" id="connectInput" placeholder="输入对方连接ID"
+                           style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 10px;">
+                    <button onclick="manualConnect()" class="btn">连接</button>
+                </div>
+            `;
+            container.insertBefore(manualConnect, document.querySelector('.instructions'));
+        }
+
+        // 手动连接
+        function manualConnect() {
+            const targetPeerId = document.getElementById('connectInput').value.trim();
+            if (targetPeerId) {
+                stopScanner();
+                connectToPeer(targetPeerId);
             }
         }
 
