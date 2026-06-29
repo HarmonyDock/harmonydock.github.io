@@ -8,23 +8,7 @@ window.addEventListener('scroll', () => {
     }
 });
 
-// 移动端菜单切换
-const hamburger = document.getElementById('hamburger');
-const navMenu = document.getElementById('navMenu');
-const navLinks = document.querySelectorAll('.nav-menu a');
 
-hamburger.addEventListener('click', () => {
-    hamburger.classList.toggle('active');
-    navMenu.classList.toggle('active');
-});
-
-// 点击导航链接后关闭移动端菜单
-navLinks.forEach(link => {
-    link.addEventListener('click', () => {
-        hamburger.classList.remove('active');
-        navMenu.classList.remove('active');
-    });
-});
 
 // 联系表单提交处理（如果存在）
 const contactForm = document.getElementById('contactForm');
@@ -93,30 +77,7 @@ document.querySelectorAll('.feature-card, .pricing-card, .overview-card, .screen
     observer.observe(card);
 });
 
-// 导航链接高亮
-const sections = document.querySelectorAll('section[id]');
 
-window.addEventListener('scroll', () => {
-    let current = '';
-    sections.forEach(section => {
-        const sectionTop = section.offsetTop;
-        const sectionHeight = section.clientHeight;
-        if (scrollY >= sectionTop - 200) {
-            current = section.getAttribute('id');
-        }
-    });
-
-    navLinks.forEach(link => {
-        // 跳过非锚点链接(如 index.html 和 theme.html)
-        if (!link.getAttribute('href').startsWith('#')) {
-            return;
-        }
-        link.classList.remove('active');
-        if (link.getAttribute('href') === `#${current}`) {
-            link.classList.add('active');
-        }
-    });
-});
 
 // 添加滚动到顶部按钮
 const scrollToTopBtn = document.createElement('button');
